@@ -9,7 +9,7 @@ const port = process.env.PORT || 3000;
 
 app.use(bodyParser.json());
 
-// Ajouter un middleware pour loguer toutes les requêtes entrantes
+// Ajouter un middleware pour loguer toutes les requêtes
 app.use((req, res, next) => {
     console.log(`${req.method} ${req.url} - ${new Date().toISOString()}`);
     next();
@@ -62,15 +62,14 @@ app.post('/create-transaction', async (req, res) => {
             )
         );
 
-        // Récupérer le recentBlockhash et définir le feePayer
         const { blockhash } = await connection.getLatestBlockhash();
         transaction.recentBlockhash = blockhash;
         transaction.feePayer = fromPublicKey;
 
         console.log("Transaction créée avec succès avec recentBlockhash.");
 
-        // Sérialiser la transaction complète, incluant les signatures
-        const serializedTransaction = transaction.serialize().toString('base64');
+        // Sérialiser la transaction sans signature
+        const serializedTransaction = transaction.serializeMessage().toString('base64');
         res.json({ transaction: serializedTransaction });
     } catch (error) {
         console.error("Erreur lors de la création de la transaction : ", error);
