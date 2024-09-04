@@ -69,7 +69,7 @@ app.post('/create-transaction', async (req, res) => {
 
         console.log("Transaction créée avec succès avec recentBlockhash.");
 
-        // Sérialiser la transaction sans la signer
+        // Sérialiser la transaction pour le client
         const serializedTransaction = transaction.serializeMessage().toString('base64');
         res.json({ transaction: serializedTransaction });
     } catch (error) {
