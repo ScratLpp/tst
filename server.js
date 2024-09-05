@@ -1,8 +1,9 @@
 // server.js
 const express = require('express');
 const bodyParser = require('body-parser');
-const { Connection, PublicKey, clusterApiUrl } = require('@solana/web3.js');
+const { Connection, PublicKey, clusterApiUrl, Transaction } = require('@solana/web3.js');
 const splToken = require('@solana/spl-token');
+const Buffer = require('buffer').Buffer;
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -15,30 +16,66 @@ app.use((req, res, next) => {
     next();
 });
 
-// Endpoint pour obtenir l'adresse du compte associé au token (ATA)
-app.post('/get-ata', async (req, res) => {
-    const { fromPubkey, mintAddress } = req.body;
+// Endpoint pour créer une transaction de transfert USDT
+app.post('/create-transaction', async (req, res) => {
+    console.log("Requête POST reçue sur /create-transaction");
 
-    if (!fromPubkey || !mintAddress) {
+    const { fromPubkey, toPubkey, amount } = req.body;
+
+    console.log("Corps de la requête : ", req.body);
+
+    if (!fromPubkey || !toPubkey || !amount) {
+        console.log("Paramètres manquants");
         return res.status(400).send('Missing parameters');
     }
 
     try {
+        console.log("Connexion à Solana...");
         const connection = new Connection(clusterApiUrl('mainnet-beta'));
-        const fromPublicKey = new PublicKey(fromPubkey);
-        const mintPublicKey = new PublicKey(mintAddress);
 
-        const ata = await splToken.getOrCreateAssociatedTokenAccount(
+        const usdtTokenMintAddress = new PublicKey('Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB');
+        const fromPublicKey = new PublicKey(fromPubkey);
+        const toPublicKey = new PublicKey(toPubkey);
+
+        console.log("Obtention de l'ATA pour l'utilisateur...");
+        const fromTokenAccount = await splToken.getOrCreateAssociatedTokenAccount(
             connection,
-            fromPublicKey,  // Le wallet utilisateur
-            mintPublicKey,  // Adresse du token mint
-            fromPublicKey   // Propriétaire du wallet
+            fromPublicKey,
+            usdtTokenMintAddress,
+            fromPublicKey
         );
 
-        res.json({ ata: ata.address.toBase58() });
+        console.log("Obtention de l'ATA pour le destinataire...");
+        const toTokenAccount = await splToken.getOrCreateAssociatedTokenAccount(
+            connection,
+            fromPublicKey,
+            usdtTokenMintAddress,
+            toPublicKey
+        );
+
+        console.log("Création de la transaction...");
+        const transaction = new Transaction().add(
+            splToken.createTransferInstruction(
+                fromTokenAccount.address,
+                toTokenAccount.address,
+                fromPublicKey,
+                amount * Math.pow(10, 6) // Montant en USDT (6 décimales)
+            )
+        );
+
+        const { blockhash } = await connection.getLatestBlockhash();
+        transaction.recentBlockhash = blockhash;
+        transaction.feePayer = fromPublicKey;
+
+        console.log("Transaction créée avec succès avec recentBlockhash.");
+
+        // Sérialiser la transaction sans la signer et l'envoyer au client
+        const serializedTransaction = Buffer.from(transaction.serializeMessage()).toString('base64');
+        res.json({ transaction: serializedTransaction });
+
     } catch (error) {
-        console.error("Erreur lors de l'obtention de l'ATA : ", error);
-        res.status(500).send('Erreur lors de l\'obtention de l\'ATA');
+        console.error("Erreur lors de la création de la transaction : ", error);
+        res.status(500).send('Erreur lors de la création de la transaction');
     }
 });
 
