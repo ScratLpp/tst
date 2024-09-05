@@ -1,4 +1,3 @@
-// server.js
 const express = require('express');
 const bodyParser = require('body-parser');
 const { Connection, PublicKey, clusterApiUrl, Transaction } = require('@solana/web3.js');
@@ -21,8 +20,6 @@ app.post('/create-transaction', async (req, res) => {
     console.log("Requête POST reçue sur /create-transaction");
 
     const { fromPubkey, toPubkey, amount } = req.body;
-
-    console.log("Corps de la requête : ", req.body);
 
     if (!fromPubkey || !toPubkey || !amount) {
         console.log("Paramètres manquants");
@@ -71,7 +68,12 @@ app.post('/create-transaction', async (req, res) => {
 
         // Sérialiser la transaction sans la signer et l'envoyer au client
         const serializedTransaction = Buffer.from(transaction.serializeMessage()).toString('base64');
-        res.json({ transaction: serializedTransaction });
+        
+        // Envoyer la transaction et le blockhash
+        res.json({ 
+            transaction: serializedTransaction, 
+            blockhash: blockhash
+        });
 
     } catch (error) {
         console.error("Erreur lors de la création de la transaction : ", error);
