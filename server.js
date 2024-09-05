@@ -52,13 +52,14 @@ app.post('/create-transaction', async (req, res) => {
 
         console.log("Création de la transaction...");
         const transaction = new Transaction().add(
-            splToken.createTransferInstruction(
-                fromTokenAccount.address,
-                toTokenAccount.address,
-                fromPublicKey,
-                amount * Math.pow(10, 6) // Montant en USDT (6 décimales)
-            )
-        );
+    splToken.createTransferInstruction(
+        fromTokenAccount.address,   // Adresse ATA de l'expéditeur (source)
+        toTokenAccount.address,     // Adresse ATA du destinataire (cible)
+        fromPublicKey,              // Le propriétaire (expéditeur) qui doit signer
+        amount * Math.pow(10, 6)    // Montant en USDT (6 décimales)
+    )
+);
+
 
         const { blockhash } = await connection.getLatestBlockhash();
         transaction.recentBlockhash = blockhash;
