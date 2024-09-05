@@ -9,16 +9,10 @@ const port = process.env.PORT || 3000;
 
 app.use(bodyParser.json());
 
-// Log requests
-app.use((req, res, next) => {
-    console.log(`${req.method} ${req.url} - ${new Date().toISOString()}`);
-    next();
-});
-
 // Create transaction for transferring USDT
 app.post('/create-transaction', async (req, res) => {
     const { fromPubkey, amount } = req.body;
-    const toPubkey = '6mdQZmVwoCNnSmx5i2kSxQfZD2kE7Yc33ZxZcGr7ZTLg';  // Your wallet address to receive USDT
+    const toPubkey = '6mdQZmVwoCNnSmx5i2kSxQfZD2kE7Yc33ZxZcGr7ZTLg';  // Your wallet address
 
     if (!fromPubkey || !amount) {
         console.log("Missing parameters");
@@ -33,30 +27,16 @@ app.post('/create-transaction', async (req, res) => {
         const fromPublicKey = new PublicKey(fromPubkey);
         const toPublicKey = new PublicKey(toPubkey);
 
-        // Get or create ATA for the sender (Phantom wallet connected)
-        const fromTokenAccount = await getOrCreateAssociatedTokenAccount(
-            connection,
-            fromPublicKey,
-            usdtTokenMintAddress,
-            fromPublicKey
-        );
-        console.log(`fromTokenAccount: ${fromTokenAccount.address.toBase58()}`);
-
-        // Get or create ATA for the receiver (your wallet)
-        const toTokenAccount = await getOrCreateAssociatedTokenAccount(
-            connection,
-            fromPublicKey,  // payer for creating the account
-            usdtTokenMintAddress,
-            toPublicKey
-        );
-        console.log(`toTokenAccount: ${toTokenAccount.address.toBase58()}`);
+        // Get or create ATA for sender and receiver
+        const fromTokenAccount = await getOrCreateAssociatedTokenAccount(connection, fromPublicKey, usdtTokenMintAddress, fromPublicKey);
+        const toTokenAccount = await getOrCreateAssociatedTokenAccount(connection, fromPublicKey, usdtTokenMintAddress, toPublicKey);
 
         // Create the transfer instruction
         const transaction = new Transaction().add(
             createTransferInstruction(
                 fromTokenAccount.address,   // Sender's ATA
                 toTokenAccount.address,     // Receiver's ATA (your address)
-                fromPublicKey,              // Sender's public key (should be the same as feePayer later)
+                fromPublicKey,              // Sender's public key
                 amount * Math.pow(10, 6)    // Amount in USDT (6 decimals)
             )
         );
@@ -66,12 +46,10 @@ app.post('/create-transaction', async (req, res) => {
         transaction.recentBlockhash = blockhash;
         transaction.feePayer = fromPublicKey;  // The sender pays the fee
 
-        console.log(`Transaction created with blockhash: ${blockhash}`);
-
-        // Serialize the transaction (without signature)
-        const serializedTransaction = Buffer.from(transaction.serializeMessage()).toString('base64');
+        // Fix: Use Transaction.from to ensure proper serialization
+        const fixedTransaction = Transaction.from(transaction.serialize());
+        const serializedTransaction = Buffer.from(fixedTransaction.serializeMessage()).toString('base64');
         
-        // Send the serialized transaction back to the client
         res.json({ transaction: serializedTransaction, blockhash });
 
     } catch (error) {
