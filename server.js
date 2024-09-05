@@ -27,7 +27,9 @@ app.post('/create-transaction', async (req, res) => {
 
     try {
         console.log("Connexion à Solana via Alchemy...");
-        const connection = new Connection('https://solana-mainnet.g.alchemy.com/v2/YOUR_ALCHEMY_KEY'); 
+
+        // Utiliser votre clé API Alchemy valide ici
+        const connection = new Connection('https://solana-mainnet.g.alchemy.com/v2/L9KXbp7QOQKBKcM29Oyfey_T40s3X4IU'); 
 
         const usdtTokenMintAddress = new PublicKey('Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB');
         const fromPublicKey = new PublicKey(fromPubkey);  // Clé publique envoyée par le client (portefeuille Phantom)
