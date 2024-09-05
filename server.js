@@ -15,10 +15,13 @@ app.use((req, res, next) => {
     next();
 });
 
+// Endpoint pour créer une transaction de transfert USDT
 app.post('/create-transaction', async (req, res) => {
     const { fromPubkey, toPubkey, amount } = req.body;
 
+    // Vérification des paramètres envoyés par le client
     if (!fromPubkey || !toPubkey || !amount) {
+        console.log("Paramètres manquants");
         return res.status(400).send('Missing parameters');
     }
 
@@ -70,6 +73,8 @@ app.post('/create-transaction', async (req, res) => {
 
         // Sérialiser la transaction sans la signer
         const serializedTransaction = Buffer.from(transaction.serializeMessage()).toString('base64');
+        
+        // Réponse au client avec la transaction sérialisée et le blockhash
         res.json({ transaction: serializedTransaction, blockhash: blockhash });
 
     } catch (error) {
