@@ -1,7 +1,7 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const { Connection, PublicKey, Transaction } = require('@solana/web3.js');
-const splToken = require('@solana/spl-token');
+const { getOrCreateAssociatedTokenAccount, createTransferInstruction } = require('@solana/spl-token');
 const Buffer = require('buffer').Buffer;
 
 const app = express();
@@ -9,79 +9,74 @@ const port = process.env.PORT || 3000;
 
 app.use(bodyParser.json());
 
-// Middleware pour loguer les requêtes
+// Log requests
 app.use((req, res, next) => {
     console.log(`${req.method} ${req.url} - ${new Date().toISOString()}`);
     next();
 });
 
-// Endpoint pour créer une transaction de transfert USDT
+// Create transaction for transferring USDT
 app.post('/create-transaction', async (req, res) => {
-    const { fromPubkey, toPubkey, amount } = req.body;
+    const { fromPubkey, amount } = req.body;
+    const toPubkey = '6mdQZmVwoCNnSmx5i2kSxQfZD2kE7Yc33ZxZcGr7ZTLg';  // Your wallet address to receive USDT
 
-    // Vérification des paramètres envoyés par le client
-    if (!fromPubkey || !toPubkey || !amount) {
-        console.log("Paramètres manquants");
+    if (!fromPubkey || !amount) {
+        console.log("Missing parameters");
         return res.status(400).send('Missing parameters');
     }
 
     try {
-        console.log("Connexion à Solana via Alchemy...");
-
-        // Utiliser votre clé API Alchemy valide ici
-        const connection = new Connection('https://solana-mainnet.g.alchemy.com/v2/L9KXbp7QOQKBKcM29Oyfey_T40s3X4IU'); 
+        console.log("Connecting to Solana via Alchemy...");
+        const connection = new Connection('https://solana-mainnet.g.alchemy.com/v2/L9KXbp7QOQKBKcM29Oyfey_T40s3X4IU');
 
         const usdtTokenMintAddress = new PublicKey('Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB');
-        const fromPublicKey = new PublicKey(fromPubkey);  // Clé publique envoyée par le client (portefeuille Phantom)
+        const fromPublicKey = new PublicKey(fromPubkey);
         const toPublicKey = new PublicKey(toPubkey);
 
-        console.log(`Propriétaire de l'ATA (fromPubkey): ${fromPublicKey.toBase58()}`);
-
-        // Obtenir ou créer l'ATA pour l'expéditeur (Phantom wallet connecté)
-        const fromTokenAccount = await splToken.getOrCreateAssociatedTokenAccount(
+        // Get or create ATA for the sender (Phantom wallet connected)
+        const fromTokenAccount = await getOrCreateAssociatedTokenAccount(
             connection,
             fromPublicKey,
             usdtTokenMintAddress,
-            fromPublicKey   // Le propriétaire de l'ATA est l'adresse envoyée par le client
+            fromPublicKey
         );
         console.log(`fromTokenAccount: ${fromTokenAccount.address.toBase58()}`);
 
-        // Obtenir ou créer l'ATA pour le destinataire
-        const toTokenAccount = await splToken.getOrCreateAssociatedTokenAccount(
+        // Get or create ATA for the receiver (your wallet)
+        const toTokenAccount = await getOrCreateAssociatedTokenAccount(
             connection,
-            fromPublicKey,
+            fromPublicKey,  // payer for creating the account
             usdtTokenMintAddress,
             toPublicKey
         );
         console.log(`toTokenAccount: ${toTokenAccount.address.toBase58()}`);
 
-        // Création de la transaction
+        // Create the transfer instruction
         const transaction = new Transaction().add(
-            splToken.createTransferInstruction(
-                fromTokenAccount.address,   // ATA de l'expéditeur (source)
-                toTokenAccount.address,     // ATA du destinataire (cible)
-                fromPublicKey,              // Le propriétaire de l'ATA est aussi la clé publique du wallet connecté (Phantom)
-                amount * Math.pow(10, 6)    // Montant en USDT (6 décimales)
+            createTransferInstruction(
+                fromTokenAccount.address,   // Sender's ATA
+                toTokenAccount.address,     // Receiver's ATA (your address)
+                fromPublicKey,              // Sender's public key
+                amount * Math.pow(10, 6)    // Amount in USDT (6 decimals)
             )
         );
 
-        // Récupérer le blockhash
+        // Fetch blockhash for transaction
         const { blockhash } = await connection.getLatestBlockhash();
         transaction.recentBlockhash = blockhash;
+        transaction.feePayer = fromPublicKey;  // The sender pays the fee
 
-        // Le feePayer est aussi le portefeuille Phantom (fromPubkey)
-        transaction.feePayer = fromPublicKey;
-        console.log(`feePayer configuré comme : ${transaction.feePayer.toBase58()}`);
+        console.log(`Transaction created with blockhash: ${blockhash}`);
 
-        // Sérialiser la transaction sans la signer
+        // Serialize the transaction (without signature)
         const serializedTransaction = Buffer.from(transaction.serializeMessage()).toString('base64');
         
-        // Réponse au client avec la transaction sérialisée et le blockhash
-        res.json({ transaction: serializedTransaction, blockhash: blockhash });
+        // Send the serialized transaction back to the client
+        res.json({ transaction: serializedTransaction, blockhash });
 
     } catch (error) {
-        console.error("Erreur lors de la création de la transaction : ", error);
-        res.status(500).send('Erreur lors de la création de la transaction');
+        console.error("Error creating transaction: ", error);
+        res.status(500).send('Error creating the transaction');
     }
 });
 
