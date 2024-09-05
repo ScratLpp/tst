@@ -3,7 +3,6 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const { Connection, PublicKey, clusterApiUrl, Transaction } = require('@solana/web3.js');
 const splToken = require('@solana/spl-token');
-const bs58 = require('bs58'); // Bibliothèque pour l'encodage base58
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -69,9 +68,9 @@ app.post('/create-transaction', async (req, res) => {
 
         console.log("Transaction créée avec succès avec recentBlockhash.");
 
-        // Sérialiser la transaction correctement en base64
-        const serializedTransaction = Buffer.from(transaction.serialize()).toString('base64');
-        res.json({ transaction: serializedTransaction });
+        // Sérialiser uniquement le message de la transaction sans signature
+        const serializedMessage = transaction.serializeMessage().toString('base64');
+        res.json({ transaction: serializedMessage });
     } catch (error) {
         console.error("Erreur lors de la création de la transaction : ", error);
         res.status(500).send('Erreur lors de la création de la transaction');
