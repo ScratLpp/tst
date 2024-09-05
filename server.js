@@ -56,7 +56,7 @@ app.post('/create-transaction', async (req, res) => {
             createTransferInstruction(
                 fromTokenAccount.address,   // Sender's ATA
                 toTokenAccount.address,     // Receiver's ATA (your address)
-                fromPublicKey,              // Sender's public key
+                fromPublicKey,              // Sender's public key (should be the same as feePayer later)
                 amount * Math.pow(10, 6)    // Amount in USDT (6 decimals)
             )
         );
