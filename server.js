@@ -9,19 +9,17 @@ const port = process.env.PORT || 3000;
 
 app.use(bodyParser.json());
 
-// Ajouter un middleware pour loguer toutes les requêtes
 app.use((req, res, next) => {
     console.log(`${req.method} ${req.url} - ${new Date().toISOString()}`);
     next();
 });
 
-// Endpoint pour créer une transaction de transfert USDT
 app.post('/create-transaction', async (req, res) => {
     console.log("Requête POST reçue sur /create-transaction");
 
     const { fromPubkey, toPubkey, amount } = req.body;
 
-    console.log("Corps de la requête : ", req.body); // Log pour vérifier les paramètres reçus
+    console.log("Corps de la requête : ", req.body);
 
     if (!fromPubkey || !toPubkey || !amount) {
         console.log("Paramètres manquants");
@@ -68,9 +66,9 @@ app.post('/create-transaction', async (req, res) => {
 
         console.log("Transaction créée avec succès avec recentBlockhash.");
 
-        // Sérialiser uniquement le message de la transaction sans signature
-        const serializedMessage = transaction.serializeMessage().toString('base64');
-        res.json({ transaction: serializedMessage });
+        // Sérialiser la transaction sans inclure les signatures
+        const serializedTransaction = transaction.serializeMessage().toString('base64');
+        res.json({ transaction: serializedTransaction });
     } catch (error) {
         console.error("Erreur lors de la création de la transaction : ", error);
         res.status(500).send('Erreur lors de la création de la transaction');
