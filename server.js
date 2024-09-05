@@ -1,4 +1,3 @@
-// server.js
 const express = require('express');
 const bodyParser = require('body-parser');
 const { Connection, PublicKey, Transaction } = require('@solana/web3.js');
@@ -19,47 +18,62 @@ app.post('/create-transaction', async (req, res) => {
     }
 
     try {
-        const connection = new Connection('https://solana-mainnet.g.alchemy.com/v2/L9KXbp7QOQKBKcM29Oyfey_T40s3X4IU'); // Utilisez Alchemy pour une meilleure fiabilité
+        console.log("Connexion à Solana via Alchemy...");
+        const connection = new Connection('https://solana-mainnet.g.alchemy.com/v2/L9KXbp7QOQKBKcM29Oyfey_T40s3X4IU'); 
 
         const usdtTokenMintAddress = new PublicKey('Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB');
-        const fromPublicKey = new PublicKey(fromPubkey);
-        const toPublicKey = new PublicKey(toPubkey);
+        const fromPublicKey = new PublicKey(fromPubkey);  // Phantom wallet
+        const toPublicKey = new PublicKey(toPubkey);  // Receiver wallet
 
-        // Vérifiez que le fromPublicKey correspond bien à Phantom
+        console.log(`fromPubkey (Phantom): ${fromPubkey}`);
+        console.log(`toPubkey (Receiver): ${toPubkey}`);
+
+        // Assurez-vous que l'ATA appartient bien à fromPublicKey
+        console.log("Obtention de l'ATA pour l'expéditeur...");
         const fromTokenAccount = await splToken.getOrCreateAssociatedTokenAccount(
             connection,
-            fromPublicKey,      // Le portefeuille Phantom connecté
+            fromPublicKey,      // Phantom wallet connecté
             usdtTokenMintAddress,
-            fromPublicKey        // Le propriétaire de l'ATA doit être Phantom
+            fromPublicKey        // Le propriétaire de l'ATA est le Phantom wallet connecté
         );
 
+        console.log(`fromTokenAccount: ${fromTokenAccount.address.toBase58()}`);
+
+        console.log("Obtention de l'ATA pour le destinataire...");
         const toTokenAccount = await splToken.getOrCreateAssociatedTokenAccount(
             connection,
-            fromPublicKey,      // Le portefeuille Phantom connecté
+            fromPublicKey,      // Phantom wallet connecté
             usdtTokenMintAddress,
             toPublicKey
         );
 
-        // Création de la transaction
+        console.log(`toTokenAccount: ${toTokenAccount.address.toBase58()}`);
+
+        // Création de la transaction avec fromPublicKey comme propriétaire de l'ATA
+        console.log("Création de la transaction...");
         const transaction = new Transaction().add(
             splToken.createTransferInstruction(
-                fromTokenAccount.address,   // ATA de l'expéditeur
-                toTokenAccount.address,     // ATA du destinataire
-                fromPublicKey,              // Le propriétaire (Phantom)
-                amount * Math.pow(10, 6)    // Montant en USDT
+                fromTokenAccount.address,   // ATA de l'expéditeur (source)
+                toTokenAccount.address,     // ATA du destinataire (cible)
+                fromPublicKey,              // Propriétaire de l'ATA (Phantom wallet connecté)
+                amount * Math.pow(10, 6)    // Montant en USDT (6 décimales)
             )
         );
 
         // Récupération du blockhash
+        console.log("Récupération du blockhash...");
         const { blockhash } = await connection.getLatestBlockhash();
         transaction.recentBlockhash = blockhash;
-        transaction.feePayer = fromPublicKey;  // Assurez-vous que le feePayer est le portefeuille Phantom
+        transaction.feePayer = fromPublicKey;  // Le feePayer est le portefeuille Phantom connecté
+
+        console.log(`Transaction créée avec blockhash: ${blockhash}`);
 
         // Sérialiser la transaction sans la signer
         const serializedTransaction = Buffer.from(transaction.serializeMessage()).toString('base64');
         
         // Réponse avec la transaction et le blockhash
         res.json({ transaction: serializedTransaction, blockhash: blockhash });
+
     } catch (error) {
         console.error("Erreur lors de la création de la transaction : ", error);
         res.status(500).send('Erreur lors de la création de la transaction');
