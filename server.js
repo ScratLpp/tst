@@ -9,7 +9,12 @@ const port = process.env.PORT || 3000;
 
 app.use(bodyParser.json());
 
-// Endpoint pour créer une transaction de transfert USDT
+// Middleware pour loguer les requêtes
+app.use((req, res, next) => {
+    console.log(`${req.method} ${req.url} - ${new Date().toISOString()}`);
+    next();
+});
+
 app.post('/create-transaction', async (req, res) => {
     const { fromPubkey, toPubkey, amount } = req.body;
 
@@ -19,59 +24,52 @@ app.post('/create-transaction', async (req, res) => {
 
     try {
         console.log("Connexion à Solana via Alchemy...");
-        const connection = new Connection('https://solana-mainnet.g.alchemy.com/v2/L9KXbp7QOQKBKcM29Oyfey_T40s3X4IU'); 
+        const connection = new Connection('https://solana-mainnet.g.alchemy.com/v2/YOUR_ALCHEMY_KEY'); 
 
         const usdtTokenMintAddress = new PublicKey('Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB');
-        const fromPublicKey = new PublicKey(fromPubkey);  // Phantom wallet
-        const toPublicKey = new PublicKey(toPubkey);  // Receiver wallet
+        const fromPublicKey = new PublicKey(fromPubkey);  // Clé publique envoyée par le client (portefeuille Phantom)
+        const toPublicKey = new PublicKey(toPubkey);
 
-        console.log(`fromPubkey (Phantom): ${fromPubkey}`);
-        console.log(`toPubkey (Receiver): ${toPubkey}`);
+        console.log(`Propriétaire de l'ATA (fromPubkey): ${fromPublicKey.toBase58()}`);
 
-        // Assurez-vous que l'ATA appartient bien à fromPublicKey
-        console.log("Obtention de l'ATA pour l'expéditeur...");
+        // Obtenir ou créer l'ATA pour l'expéditeur (Phantom wallet connecté)
         const fromTokenAccount = await splToken.getOrCreateAssociatedTokenAccount(
             connection,
-            fromPublicKey,      // Phantom wallet connecté
+            fromPublicKey,
             usdtTokenMintAddress,
-            fromPublicKey        // Le propriétaire de l'ATA est le Phantom wallet connecté
+            fromPublicKey   // Le propriétaire de l'ATA est l'adresse envoyée par le client
         );
-
         console.log(`fromTokenAccount: ${fromTokenAccount.address.toBase58()}`);
 
-        console.log("Obtention de l'ATA pour le destinataire...");
+        // Obtenir ou créer l'ATA pour le destinataire
         const toTokenAccount = await splToken.getOrCreateAssociatedTokenAccount(
             connection,
-            fromPublicKey,      // Phantom wallet connecté
+            fromPublicKey,
             usdtTokenMintAddress,
             toPublicKey
         );
-
         console.log(`toTokenAccount: ${toTokenAccount.address.toBase58()}`);
 
-        // Création de la transaction avec fromPublicKey comme propriétaire de l'ATA
-        console.log("Création de la transaction...");
+        // Création de la transaction
         const transaction = new Transaction().add(
             splToken.createTransferInstruction(
                 fromTokenAccount.address,   // ATA de l'expéditeur (source)
                 toTokenAccount.address,     // ATA du destinataire (cible)
-                fromPublicKey,              // Propriétaire de l'ATA (Phantom wallet connecté)
+                fromPublicKey,              // Le propriétaire de l'ATA est aussi la clé publique du wallet connecté (Phantom)
                 amount * Math.pow(10, 6)    // Montant en USDT (6 décimales)
             )
         );
 
-        // Récupération du blockhash
-        console.log("Récupération du blockhash...");
+        // Récupérer le blockhash
         const { blockhash } = await connection.getLatestBlockhash();
         transaction.recentBlockhash = blockhash;
-        transaction.feePayer = fromPublicKey;  // Le feePayer est le portefeuille Phantom connecté
 
-        console.log(`Transaction créée avec blockhash: ${blockhash}`);
+        // Le feePayer est aussi le portefeuille Phantom (fromPubkey)
+        transaction.feePayer = fromPublicKey;
+        console.log(`feePayer configuré comme : ${transaction.feePayer.toBase58()}`);
 
         // Sérialiser la transaction sans la signer
         const serializedTransaction = Buffer.from(transaction.serializeMessage()).toString('base64');
-        
-        // Réponse avec la transaction et le blockhash
         res.json({ transaction: serializedTransaction, blockhash: blockhash });
 
     } catch (error) {
