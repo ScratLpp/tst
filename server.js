@@ -1,39 +1,53 @@
 const express = require('express');
 const bodyParser = require('body-parser');
-const { Connection, PublicKey, Transaction, SystemProgram } = require('@solana/web3.js');
+const { Connection, PublicKey, Transaction } = require('@solana/web3.js');
 const splToken = require('@solana/spl-token');
+const bs58 = require('bs58');
 
 const app = express();
 const port = process.env.PORT || 3000;
 
 app.use(bodyParser.json());
 
+app.use((req, res, next) => {
+    console.log(`${req.method} ${req.url} - ${new Date().toISOString()}`);
+    next();
+});
+
+// Endpoint pour créer une transaction de transfert USDT
 app.post('/create-transaction', async (req, res) => {
     const { fromPubkey, toPubkey, amount } = req.body;
 
     if (!fromPubkey || !toPubkey || !amount) {
+        console.log("Paramètres manquants");
         return res.status(400).send('Missing parameters');
     }
 
     try {
-        const connection = new Connection('https://solana-mainnet.g.alchemy.com/v2/L9KXbp7QOQKBKcM29Oyfey_T40s3X4IU');
-        const usdtMint = new PublicKey('Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB');
+        console.log("Connexion à Solana via Alchemy...");
+        const connection = new Connection('https://solana-mainnet.g.alchemy.com/v2/L9KXbp7QOQKBKcM29Oyfey_T40s3X4IU'); 
+
+        const usdtTokenMintAddress = new PublicKey('Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB');
         const fromPublicKey = new PublicKey(fromPubkey);
         const toPublicKey = new PublicKey(toPubkey);
+
+        console.log(`Propriétaire de l'ATA (fromPubkey): ${fromPublicKey.toBase58()}`);
 
         const fromTokenAccount = await splToken.getOrCreateAssociatedTokenAccount(
             connection,
             fromPublicKey,
-            usdtMint,
+            usdtTokenMintAddress,
             fromPublicKey
         );
+        console.log(`fromTokenAccount: ${fromTokenAccount.address.toBase58()}`);
 
         const toTokenAccount = await splToken.getOrCreateAssociatedTokenAccount(
             connection,
             fromPublicKey,
-            usdtMint,
+            usdtTokenMintAddress,
             toPublicKey
         );
+        console.log(`toTokenAccount: ${toTokenAccount.address.toBase58()}`);
 
         const transaction = new Transaction().add(
             splToken.createTransferInstruction(
@@ -47,21 +61,13 @@ app.post('/create-transaction', async (req, res) => {
         const { blockhash } = await connection.getLatestBlockhash();
         transaction.recentBlockhash = blockhash;
         transaction.feePayer = fromPublicKey;
+        console.log(`feePayer configuré comme : ${transaction.feePayer.toBase58()}`);
 
-        // Envoyer la transaction sous forme d'object JSON
-        res.json({
-            transaction: {
-                instructions: transaction.instructions.map(i => ({
-                    keys: i.keys.map(k => ({ pubkey: k.pubkey.toBase58(), isSigner: k.isSigner, isWritable: k.isWritable })),
-                    programId: i.programId.toBase58(),
-                    data: i.data.toString('base64')
-                })),
-                recentBlockhash: transaction.recentBlockhash,
-                feePayer: transaction.feePayer.toBase58()
-            }
-        });
+        const serializedTransaction = bs58.encode(transaction.serializeMessage());
+        res.json({ transaction: serializedTransaction, blockhash: blockhash });
+
     } catch (error) {
-        console.error("Erreur lors de la création de la transaction :", error);
+        console.error("Erreur lors de la création de la transaction : ", error);
         res.status(500).send('Erreur lors de la création de la transaction');
     }
 });
