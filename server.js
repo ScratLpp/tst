@@ -9,47 +9,58 @@ const port = process.env.PORT || 3000;
 
 app.use(bodyParser.json());
 
-// Create transaction for transferring USDT
+// Créer une transaction de transfert de USDT
 app.post('/create-transaction', async (req, res) => {
-    const { fromPubkey, amount } = req.body;
-    const toPubkey = '6mdQZmVwoCNnSmx5i2kSxQfZD2kE7Yc33ZxZcGr7ZTLg';  // Your wallet address
+    const { fromPubkey, toPubkey, amount } = req.body;
 
-    if (!fromPubkey || !amount) {
+    // Vérification des paramètres
+    if (!fromPubkey || !toPubkey || !amount) {
         console.log("Missing parameters");
         return res.status(400).send('Missing parameters');
     }
 
     try {
         console.log("Connecting to Solana via Alchemy...");
-        const connection = new Connection('https://solana-mainnet.g.alchemy.com/v2/L9KXbp7QOQKBKcM29Oyfey_T40s3X4IU');
+
+        // Connexion à Solana via Alchemy
+        const connection = new Connection('https://solana-mainnet.g.alchemy.com/v2/L9KXbp7QOQKBKcM29Oyfey_T40s3X4IU'); 
 
         const usdtTokenMintAddress = new PublicKey('Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB');
         const fromPublicKey = new PublicKey(fromPubkey);
         const toPublicKey = new PublicKey(toPubkey);
 
-        // Get or create ATA for sender and receiver
-        const fromTokenAccount = await getOrCreateAssociatedTokenAccount(connection, fromPublicKey, usdtTokenMintAddress, fromPublicKey);
-        const toTokenAccount = await getOrCreateAssociatedTokenAccount(connection, fromPublicKey, usdtTokenMintAddress, toPublicKey);
+        console.log(`Propriétaire de l'ATA (fromPubkey): ${fromPublicKey.toBase58()}`);
 
-        // Create the transfer instruction
+        // Obtenir ou créer les ATA pour l'expéditeur et le destinataire
+        const fromTokenAccount = await getOrCreateAssociatedTokenAccount(connection, fromPublicKey, usdtTokenMintAddress, fromPublicKey);
+        console.log(`fromTokenAccount: ${fromTokenAccount.address.toBase58()}`);
+
+        const toTokenAccount = await getOrCreateAssociatedTokenAccount(connection, fromPublicKey, usdtTokenMintAddress, toPublicKey);
+        console.log(`toTokenAccount: ${toTokenAccount.address.toBase58()}`);
+
+        // Création de la transaction
         const transaction = new Transaction().add(
             createTransferInstruction(
-                fromTokenAccount.address,   // Sender's ATA
-                toTokenAccount.address,     // Receiver's ATA (your address)
-                fromPublicKey,              // Sender's public key
-                amount * Math.pow(10, 6)    // Amount in USDT (6 decimals)
+                fromTokenAccount.address,
+                toTokenAccount.address,
+                fromPublicKey,
+                amount * Math.pow(10, 6) // Montant en USDT (6 décimales)
             )
         );
 
-        // Fetch blockhash for transaction
+        // Récupérer le blockhash
         const { blockhash } = await connection.getLatestBlockhash();
         transaction.recentBlockhash = blockhash;
-        transaction.feePayer = fromPublicKey;  // The sender pays the fee
 
-        // Fix: Use Transaction.from to ensure proper serialization
-        const fixedTransaction = Transaction.from(transaction.serialize());
-        const serializedTransaction = Buffer.from(fixedTransaction.serializeMessage()).toString('base64');
+        // Le feePayer est aussi le portefeuille Phantom (fromPubkey)
+        transaction.feePayer = fromPublicKey;
+        console.log(`feePayer configuré comme : ${transaction.feePayer.toBase58()}`);
+
+        // Ne pas utiliser `transaction.serialize()` ici, car nous n'avons pas de signature
+        // Sérialiser uniquement le message de la transaction
+        const serializedTransaction = Buffer.from(transaction.serializeMessage()).toString('base64');
         
+        // Répondre au client avec la transaction sérialisée et le blockhash
         res.json({ transaction: serializedTransaction, blockhash });
 
     } catch (error) {
