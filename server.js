@@ -1,77 +1,58 @@
 const express = require('express');
 const bodyParser = require('body-parser');
-const { Connection, PublicKey, Transaction } = require('@solana/web3.js');
+const { Connection, PublicKey } = require('@solana/web3.js');
 const splToken = require('@solana/spl-token');
-const { serialize } = require('borsh');
-const Buffer = require('buffer').Buffer;
 
 const app = express();
 const port = process.env.PORT || 3000;
 
+// Utilisation de body-parser pour interpréter le JSON
 app.use(bodyParser.json());
 
-class TransactionData {
-    constructor(properties) {
-        Object.keys(properties).map((key) => {
-            return (this[key] = properties[key]);
-        });
-    }
-}
-
-const transactionSchema = new Map([
-    [
-        TransactionData,
-        {
-            kind: 'struct',
-            fields: [
-                ['transaction', 'u8'],
-                ['blockhash', 'string'],
-            ],
-        },
-    ],
-]);
-
-app.post('/create-transaction', async (req, res) => {
+app.post('/create-transaction-data', async (req, res) => {
     const { fromPubkey, toPubkey, amount } = req.body;
 
+    // Vérification des paramètres
     if (!fromPubkey || !toPubkey || !amount) {
-        return res.status(400).send('Missing parameters');
+        return res.status(400).json({ error: 'Missing parameters' });
     }
 
     try {
-        const connection = new Connection('https://solana-mainnet.g.alchemy.com/v2/L9KXbp7QOQKBKcM29Oyfey_T40s3X4IU');
-        const usdtTokenMintAddress = new PublicKey('Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB');
+        // Connexion à Alchemy pour Solana mainnet
+        const connection = new Connection('https://solana-mainnet.g.alchemy.com/v2/L9KXbp7QOQKBKcM29Oyfey_T40s3X4IU');  
+
+        // Adresse du mint pour USDT sur Solana
+        const usdtMintAddress = new PublicKey('Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB');
+
+        // Conversion des clés publiques en objets PublicKey
         const fromPublicKey = new PublicKey(fromPubkey);
         const toPublicKey = new PublicKey(toPubkey);
 
-        const fromTokenAccount = await splToken.getOrCreateAssociatedTokenAccount(connection, fromPublicKey, usdtTokenMintAddress, fromPublicKey);
-        const toTokenAccount = await splToken.getOrCreateAssociatedTokenAccount(connection, fromPublicKey, usdtTokenMintAddress, toPublicKey);
-
-        const transaction = new Transaction().add(
-            splToken.createTransferInstruction(
-                fromTokenAccount.address,
-                toTokenAccount.address,
-                fromPublicKey,
-                amount * Math.pow(10, 6) // USDT uses 6 decimal places
-            )
+        // Récupérer ou créer l'ATA (Associated Token Account) pour l'expéditeur
+        const fromTokenAccount = await splToken.getOrCreateAssociatedTokenAccount(
+            connection,
+            fromPublicKey,  // Payer
+            usdtMintAddress,
+            fromPublicKey    // Propriétaire du compte
         );
 
-        const { blockhash } = await connection.getLatestBlockhash();
-        transaction.recentBlockhash = blockhash;
-        transaction.feePayer = fromPublicKey;
+        // Récupérer ou créer l'ATA pour le destinataire
+        const toTokenAccount = await splToken.getOrCreateAssociatedTokenAccount(
+            connection,
+            fromPublicKey,  // Payer
+            usdtMintAddress,
+            toPublicKey    // Propriétaire du compte
+        );
 
-        // Serialize the transaction with Borsh
-        const transactionData = new TransactionData({
-            transaction: transaction.serializeMessage(),
-            blockhash: blockhash,
+        // Envoyer les informations nécessaires pour créer la transaction côté client
+        res.json({
+            fromTokenAccount: fromTokenAccount.address.toString(),
+            toTokenAccount: toTokenAccount.address.toString(),
+            amount
         });
-
-        const serializedTransaction = serialize(transactionSchema, transactionData).toString('base64');
-        res.json({ transaction: serializedTransaction });
-
     } catch (error) {
-        console.error("Error creating transaction: ", error);
-        res.status(500).send('Error creating transaction');
+        console.error('Error creating transaction data:', error);
+        res.status(500).json({ error: 'Failed to create transaction data' });
     }
 });
 
